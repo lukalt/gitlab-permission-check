@@ -59,6 +59,25 @@ public class PermissionChecker {
         System.out.print("Input: ");
         final String prefix = in.readLine().trim();
 
+        System.out.println("Do you want filter the projects by state? (0 = all , 1 = active projects, 2 = archived projects)");
+        System.out.print("Input [default: all]:");
+        final String projectState = in.readLine().trim();
+        boolean activeProjects = false;
+        boolean archivedProjects = false;
+
+        switch (projectState) {
+            case "1":
+                activeProjects = true;
+                break;
+            case "2":
+                archivedProjects = true;
+                break;
+            default:
+                activeProjects = true;
+                archivedProjects = true;
+                break;
+        }
+
         final String fileName = "output.html";
 
 
@@ -67,7 +86,7 @@ public class PermissionChecker {
                 return true;
             }
             return a.getPathWithNamespace().toLowerCase().startsWith(prefix.toLowerCase());
-        });
+        }, archivedProjects, activeProjects);
 
         String formattedHtml = writeHtml(serverId, access);
 
@@ -91,13 +110,19 @@ public class PermissionChecker {
 
     }
 
-    private static Map<String, List<AccessInfo>> requestAllProjects(String serverId, String personalAccessToken, Predicate<Project> filter) {
+    private static Map<String, List<AccessInfo>> requestAllProjects(String serverId, String personalAccessToken, Predicate<Project> filter, boolean loadArchived, boolean loadActives) {
         GitLabApi gitLabApi = new GitLabApi(serverId, personalAccessToken);
         Map<String, List<AccessInfo>> access = new ConcurrentHashMap<>();
 
         System.out.println("Requesting list of projects");
         try {
-            List<Project> projects = gitLabApi.getProjectApi().getProjects(false, Visibility.PRIVATE, Constants.ProjectOrderBy.NAME, Constants.SortOrder.ASC, null, null, true, true, null, null);
+            List<Project> projects = new ArrayList<>();
+            if (loadActives) {
+                projects.addAll(gitLabApi.getProjectApi().getProjects(false, Visibility.PRIVATE, Constants.ProjectOrderBy.NAME, Constants.SortOrder.ASC, null, null, true, true, null, null));
+            }
+            if (loadArchived) {
+                projects.addAll(gitLabApi.getProjectApi().getProjects(true, Visibility.PRIVATE, Constants.ProjectOrderBy.NAME, Constants.SortOrder.ASC, null, null, true, true, null, null));
+            }
             AtomicInteger processed = new AtomicInteger();
             projects.parallelStream().forEach(project -> {
                 final double fraction = processed.get() / (double) projects.size();
